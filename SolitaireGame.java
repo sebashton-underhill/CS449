@@ -17,9 +17,9 @@ public class SolitaireGame {
     }
 
     public boolean makeMove(Position from, Position to) {
-        return board.makeMove(new Move(from, to));
+        return board.makeMove(from, to);
     }
-
+    
     public boolean isGameWon() {
         return board.isGameWon();
     }
@@ -33,11 +33,11 @@ public class SolitaireGame {
     }
 
     public int getPegCount() {
-        return board.pegCount();
+        return board.getPegCount();
     }
 
     public String getRating() {
-        int pegs = board.pegCount();
+        int pegs = board.getPegCount();
 
         if (pegs == 1) {
             return "Outstanding";

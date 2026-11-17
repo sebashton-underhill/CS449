@@ -1,6 +1,12 @@
 package model;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Random;
+import java.util.Set;
 
 public class Board {
 
@@ -16,7 +22,8 @@ public class Board {
 
         if (size < 3 || size % 2 == 0) {
             throw new IllegalArgumentException(
-                    "Board size must be odd and at least 3.");
+                    "Board size must be odd and at least 3."
+            );
         }
 
         this.type = type;
@@ -25,52 +32,6 @@ public class Board {
         this.pegs = new HashSet<>();
 
         initializeBoard();
-    }
-
-    private Set<Position> createPositions(BoardType type, int size) {
-        Set<Position> positions = new HashSet<>();
-        int middle = size / 2;
-
-        for (int row = 0; row < size; row++) {
-            for (int col = 0; col < size; col++) {
-                boolean valid = switch (type) {
-                    case ENGLISH ->
-                            (row >= size / 3 && row < size - size / 3)
-                            || (col >= size / 3 && col < size - size / 3);
-
-                    case HEXAGON ->
-                            Math.abs(row - middle)
-                            + Math.abs(col - middle)
-                            + Math.abs((row - middle) - (col - middle))
-                            <= size - 1;
-
-                    case DIAMOND ->
-                            Math.abs(row - middle)
-                            + Math.abs(col - middle) <= middle;
-                };
-
-                if (valid) {
-                    positions.add(new Position(row, col));
-                }
-            }
-        }
-
-        return positions;
-    }
-
-    private void initializeBoard() {
-        pegs.clear();
-
-        for (Position position : validPositions) {
-            pegs.add(position);
-        }
-
-        // The center position starts empty.
-        pegs.remove(centerPosition());
-    }
-
-    public Position centerPosition() {
-        return new Position(size / 2, size / 2);
     }
 
     public BoardType getType() {
@@ -89,47 +50,75 @@ public class Board {
         return Collections.unmodifiableSet(pegs);
     }
 
-    public boolean hasPeg(Position position) {
-        return pegs.contains(position);
+    public int getPegCount() {
+        return pegs.size();
     }
 
-    public int pegCount() {
-        return pegs.size();
+    private Set<Position> createPositions(BoardType type, int size) {
+        Set<Position> positions = new HashSet<>();
+
+        int center = size / 2;
+
+        for (int row = 0; row < size; row++) {
+            for (int col = 0; col < size; col++) {
+
+                boolean valid;
+
+                switch (type) {
+                    case ENGLISH:
+                        valid =
+                                (row >= center - 1 && row <= center + 1)
+                                || (col >= center - 1 && col <= center + 1);
+                        break;
+
+                    case HEXAGON:
+                        int distance = Math.abs(row - center)
+                                + Math.abs(col - center);
+                        valid = distance <= center;
+                        break;
+
+                    case DIAMOND:
+                        valid =
+                                Math.abs(row - center)
+                                + Math.abs(col - center) <= center;
+                        break;
+
+                    default:
+                        valid = false;
+                }
+
+                if (valid) {
+                    positions.add(new Position(row, col));
+                }
+            }
+        }
+
+        return positions;
+    }
+
+    public void initializeBoard() {
+        pegs.clear();
+
+        for (Position position : validPositions) {
+            pegs.add(position);
+        }
+
+        Position center = new Position(size / 2, size / 2);
+        pegs.remove(center);
     }
 
     public boolean isValidPosition(Position position) {
         return validPositions.contains(position);
     }
 
-    private int[][] getDirections() {
-        return switch (type) {
-            case ENGLISH -> new int[][] {
-                    {1, 0}, {-1, 0},
-                    {0, 1}, {0, -1}
-            };
-
-            case HEXAGON -> new int[][] {
-                    {1, 0}, {-1, 0},
-                    {0, 1}, {0, -1},
-                    {1, -1}, {-1, 1}
-            };
-
-            case DIAMOND -> new int[][] {
-                    {1, 0}, {-1, 0},
-                    {0, 1}, {0, -1},
-                    {1, 1}, {1, -1},
-                    {-1, 1}, {-1, -1}
-            };
-        };
+    public boolean hasPeg(Position position) {
+        return pegs.contains(position);
     }
 
-    public boolean isValidMove(Move move) {
-        if (move == null || move.from() == null || move.to() == null) {
+    public boolean isValidMove(Position from, Position to) {
+        if (from == null || to == null) {
             return false;
         }
-
-        Position from = move.from();
-        Position to = move.to();
 
         if (!isValidPosition(from) || !isValidPosition(to)) {
             return false;
@@ -142,35 +131,34 @@ public class Board {
         int rowDifference = to.row() - from.row();
         int colDifference = to.col() - from.col();
 
-        for (int[] direction : getDirections()) {
-            if (rowDifference == 2 * direction[0]
-                    && colDifference == 2 * direction[1]) {
+        boolean straightMove =
+                (Math.abs(rowDifference) == 2 && colDifference == 0)
+                || (Math.abs(colDifference) == 2 && rowDifference == 0);
 
-                Position jumped = new Position(
-                        from.row() + direction[0],
-                        from.col() + direction[1]);
-
-                return pegs.contains(jumped);
-            }
-        }
-
-        return false;
-    }
-
-    public boolean makeMove(Move move) {
-        if (!isValidMove(move)) {
+        if (!straightMove) {
             return false;
         }
 
-        Position from = move.from();
-        Position to = move.to();
+        Position middle = new Position(
+                from.row() + rowDifference / 2,
+                from.col() + colDifference / 2
+        );
 
-        Position jumped = new Position(
-                (from.row() + to.row()) / 2,
-                (from.col() + to.col()) / 2);
+        return pegs.contains(middle);
+    }
+
+    public boolean makeMove(Position from, Position to) {
+        if (!isValidMove(from, to)) {
+            return false;
+        }
+
+        int middleRow = (from.row() + to.row()) / 2;
+        int middleCol = (from.col() + to.col()) / 2;
+
+        Position middle = new Position(middleRow, middleCol);
 
         pegs.remove(from);
-        pegs.remove(jumped);
+        pegs.remove(middle);
         pegs.add(to);
 
         return true;
@@ -180,15 +168,21 @@ public class Board {
         List<Move> moves = new ArrayList<>();
 
         for (Position from : pegs) {
-            for (int[] direction : getDirections()) {
+            int[][] directions = {
+                    {-2, 0},
+                    {2, 0},
+                    {0, -2},
+                    {0, 2}
+            };
+
+            for (int[] direction : directions) {
                 Position to = new Position(
-                        from.row() + 2 * direction[0],
-                        from.col() + 2 * direction[1]);
+                        from.row() + direction[0],
+                        from.col() + direction[1]
+                );
 
-                Move move = new Move(from, to);
-
-                if (isValidMove(move)) {
-                    moves.add(move);
+                if (isValidMove(from, to)) {
+                    moves.add(new Move(from, to));
                 }
             }
         }
@@ -197,14 +191,62 @@ public class Board {
     }
 
     public boolean isGameWon() {
-        return pegCount() == 1;
+        return pegs.size() == 1;
     }
 
     public boolean isGameLost() {
-        return pegCount() > 1 && legalMoves().isEmpty();
+        return !isGameWon() && legalMoves().isEmpty();
     }
 
     public boolean isGameOver() {
         return isGameWon() || isGameLost();
+    }
+
+    /**
+     * Randomizes the board while preserving the current number of pegs.
+     */
+    public void randomize(Random random) {
+        randomizePegs(random, pegs.size());
+    }
+
+    /**
+     * Randomizes the board using the requested number of pegs.
+     */
+    public void randomizePegs(Random random, int pegCount) {
+        if (random == null) {
+            throw new IllegalArgumentException("Random cannot be null.");
+        }
+
+        if (pegCount < 0 || pegCount > validPositions.size()) {
+            throw new IllegalArgumentException("Invalid peg count.");
+        }
+
+        List<Position> positions = new ArrayList<>(validPositions);
+        Collections.shuffle(positions, random);
+
+        pegs.clear();
+
+        for (int i = 0; i < pegCount; i++) {
+            pegs.add(positions.get(i));
+        }
+    }
+
+    /**
+     * Replaces the current peg arrangement.
+     * Used when loading a recorded game.
+     */
+    public void setPegs(Collection<Position> newPegs) {
+        if (newPegs == null) {
+            throw new IllegalArgumentException("Peg collection cannot be null.");
+        }
+
+        if (!validPositions.containsAll(newPegs)) {
+            throw new IllegalArgumentException(
+                    "Peg collection contains invalid positions."
+            );
+        }
+
+        pegs.clear();
+        pegs.addAll(newPegs);
     }
 }

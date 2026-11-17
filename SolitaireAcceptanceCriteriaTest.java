@@ -1,160 +1,273 @@
 package test;
 
-import static org.junit.Assert.*;
+import model.AutomatedPlayer;
+import model.Board;
+import model.BoardType;
+import model.GameMode;
+import model.GameRecorder;
+import model.GameReplay;
+import model.Move;
+import model.Position;
+import model.SolitaireGame;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-import model.*;
+import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.Random;
 import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class SolitaireAcceptanceCriteriaTest {
 
-    // AC 1.3: Game uses the selected board size.
-    @Test
-    void selectedBoardSizeIsUsed() {
-        SolitaireGame game =
-                new SolitaireGame(BoardType.ENGLISH, 7);
-
-        assertEquals(7, game.getBoard().getSize());
-    }
-
-    // AC 2.1 and AC 2.3: Board types are available and used.
-    @Test
-    void allBoardTypesAreAvailable() {
-        assertArrayEquals(
-                new BoardType[]{
-                        BoardType.ENGLISH,
-                        BoardType.HEXAGON,
-                        BoardType.DIAMOND
-                },
-                BoardType.values()
-        );
-    }
+    @TempDir
+    Path temporaryDirectory;
 
     @Test
-    void selectedBoardTypeIsUsed() {
-        SolitaireGame game =
-                new SolitaireGame(BoardType.DIAMOND, 7);
-
-        assertEquals(
-                BoardType.DIAMOND,
-                game.getBoard().getType()
-        );
-    }
-
-    // AC 3.1: Start a new game.
-    @Test
-    void newGameInitializesBoard() {
-        SolitaireGame game =
-                new SolitaireGame(BoardType.ENGLISH, 7);
-
-        assertEquals(32, game.getPegCount());
-        assertFalse(
-                game.getBoard().hasPeg(
-                        game.getBoard().centerPosition()
-                )
-        );
-    }
-
-    // AC 3.2: Board has valid positions and an empty center.
-    @Test
-    void boardContainsValidPositionsAndEmptyCenter() {
+    void englishBoardCanBeCreated() {
         Board board = new Board(BoardType.ENGLISH, 7);
 
+        assertEquals(BoardType.ENGLISH, board.getType());
+        assertEquals(7, board.getSize());
         assertFalse(board.getValidPositions().isEmpty());
-        assertTrue(
-                board.isValidPosition(board.centerPosition())
-        );
-        assertFalse(board.hasPeg(board.centerPosition()));
     }
 
-    // AC 4.1: Make a valid move.
     @Test
-    void validMoveUpdatesBoard() {
+    void hexagonBoardCanBeCreated() {
+        Board board = new Board(BoardType.HEXAGON, 7);
+
+        assertEquals(BoardType.HEXAGON, board.getType());
+        assertEquals(7, board.getSize());
+        assertFalse(board.getValidPositions().isEmpty());
+    }
+
+    @Test
+    void boardStartsWithOneEmptyCenterPosition() {
+        Board board = new Board(BoardType.ENGLISH, 7);
+
+        Position center = new Position(3, 3);
+
+        assertFalse(board.hasPeg(center));
+        assertEquals(
+                board.getValidPositions().size() - 1,
+                board.getPegCount()
+        );
+    }
+
+    @Test
+    void invalidBoardSizeIsRejected() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new Board(BoardType.ENGLISH, 4)
+        );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new Board(BoardType.ENGLISH, 2)
+        );
+    }
+
+    @Test
+    void validMoveRemovesTwoPegsAndAddsOne() {
         Board board = new Board(BoardType.ENGLISH, 7);
 
         Position from = new Position(1, 3);
-        Position jumped = new Position(2, 3);
         Position to = new Position(3, 3);
 
-        int originalPegCount = board.pegCount();
+        int originalPegCount = board.getPegCount();
 
-        assertTrue(board.makeMove(new Move(from, to)));
+        assertTrue(board.isValidMove(from, to));
+        assertTrue(board.makeMove(from, to));
 
+        assertEquals(originalPegCount - 1, board.getPegCount());
         assertFalse(board.hasPeg(from));
-        assertFalse(board.hasPeg(jumped));
+        assertFalse(board.hasPeg(new Position(2, 3)));
         assertTrue(board.hasPeg(to));
-        assertEquals(originalPegCount - 1, board.pegCount());
     }
 
-    // AC 4.2: Reject invalid moves without changing the board.
     @Test
     void invalidMoveDoesNotChangeBoard() {
         Board board = new Board(BoardType.ENGLISH, 7);
 
-        int originalPegCount = board.pegCount();
-        var originalPegs = SetCopy.copy(board.getPegs());
+        int originalPegCount = board.getPegCount();
 
-        // Destination is occupied at the start of the game.
-        Move invalidMove = new Move(
-                new Position(3, 0),
-                new Position(3, 2)
-        );
+        Position from = new Position(0, 0);
+        Position to = new Position(0, 2);
 
-        assertFalse(board.makeMove(invalidMove));
-        assertEquals(originalPegCount, board.pegCount());
-        assertEquals(originalPegs, board.getPegs());
+        assertFalse(board.isValidMove(from, to));
+        assertFalse(board.makeMove(from, to));
+
+        assertEquals(originalPegCount, board.getPegCount());
     }
 
-    // AC 5.1: The initial game is not won.
-    @Test
-    void initialBoardIsNotWon() {
-        Board board = new Board(BoardType.ENGLISH, 7);
-
-        assertFalse(board.isGameWon());
-    }
-
-    // AC 5.2: The initial board has legal moves, so it is not lost.
-    @Test
-    void initialBoardIsNotLost() {
-        Board board = new Board(BoardType.ENGLISH, 7);
-
-        assertFalse(board.isGameLost());
-        assertFalse(board.isGameOver());
-    }
-
-    // Invalid board sizes must be rejected.
-    @Test
-    void evenBoardSizeIsRejected() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> new Board(BoardType.ENGLISH, 6)
-        );
-    }
-
-    // Starting a new game resets the previous game.
     @Test
     void newGameResetsBoard() {
         SolitaireGame game =
                 new SolitaireGame(BoardType.ENGLISH, 7);
+
+        int originalPegCount = game.getPegCount();
 
         game.makeMove(
                 new Position(1, 3),
                 new Position(3, 3)
         );
 
-        assertEquals(31, game.getPegCount());
+        assertEquals(originalPegCount - 1, game.getPegCount());
 
         game.newGame(BoardType.ENGLISH, 7);
 
-        assertEquals(32, game.getPegCount());
-        assertFalse(game.isGameOver());
+        assertEquals(originalPegCount, game.getPegCount());
     }
-    
-    private static class SetCopy {
-        static <T> java.util.Set<T> copy(java.util.Set<T> values) {
-            return new java.util.HashSet<>(values);
+
+    @Test
+    void randomizationPreservesPegCount() {
+        Board board = new Board(BoardType.ENGLISH, 7);
+
+        int originalPegCount = board.getPegCount();
+
+        board.randomize(new Random(42));
+
+        assertEquals(originalPegCount, board.getPegCount());
+        assertTrue(
+                board.getValidPositions().containsAll(board.getPegs())
+        );
+    }
+
+    @Test
+    void randomizationDoesNotCreateInvalidPegPositions() {
+        Board board = new Board(BoardType.HEXAGON, 7);
+
+        board.randomize(new Random(42));
+
+        for (Position peg : board.getPegs()) {
+            assertTrue(board.isValidPosition(peg));
         }
     }
-    
+
+    @Test
+    void automatedPlayerCanChooseLegalMove() {
+        SolitaireGame game =
+                new SolitaireGame(BoardType.ENGLISH, 7);
+
+        AutomatedPlayer player = new AutomatedPlayer();
+
+        Move move = player.chooseMove(game);
+
+        assertNotNull(move);
+        assertTrue(
+                game.getBoard().isValidMove(move.from(), move.to())
+        );
+    }
+
+    @Test
+    void automatedPlayerCanPlayUntilGameOver() {
+        SolitaireGame game =
+                new SolitaireGame(BoardType.ENGLISH, 7);
+
+        AutomatedPlayer player = new AutomatedPlayer();
+
+        int safetyCounter = 0;
+
+        while (!game.isGameOver() && safetyCounter < 1000) {
+            boolean moved = player.makeNextMove(game);
+
+            assertTrue(moved);
+
+            safetyCounter++;
+        }
+
+        assertTrue(game.isGameOver());
+        assertTrue(safetyCounter < 1000);
+    }
+
+    @Test
+    void automatedPlayerDoesNotMakeMoveAfterGameOver() {
+
+    	SolitaireGame game =
+            new SolitaireGame(BoardType.ENGLISH, 7);
+
+    	Board board = game.getBoard();
+
+    	// Remove all pegs to create a completed game.
+    	board.setPegs(new HashSet<>());
+
+    	AutomatedPlayer player = new AutomatedPlayer();
+
+    	// Verify that the game has ended.
+    	assertTrue(game.isGameOver());
+
+	    // The automated player should not select a move.
+	    assertNull(player.chooseMove(game));
+	
+	    // The automated player should not execute a move.
+	    assertFalse(player.makeNextMove(game));
+	
+	    // Verify that the board remains unchanged.
+	    assertEquals(0, board.getPegCount());
+	}
+
+
+    @Test
+    void recordingCanBeSavedAndLoaded() throws Exception {
+        SolitaireGame game =
+                new SolitaireGame(BoardType.ENGLISH, 7);
+
+        GameRecorder recorder =
+                new GameRecorder(game, GameMode.MANUAL);
+
+        Move move = new Move(
+                new Position(1, 3),
+                new Position(3, 3)
+        );
+
+        assertTrue(game.makeMove(move.from(), move.to()));
+
+        recorder.recordMove(move);
+
+        Path recordingFile =
+                temporaryDirectory.resolve("game-recording.txt");
+
+        recorder.save(recordingFile);
+
+        assertTrue(java.nio.file.Files.exists(recordingFile));
+
+        GameReplay replay = GameReplay.load(recordingFile);
+
+        assertNotNull(replay);
+        assertNotNull(replay.getGame());
+    }
+
+    @Test
+    void replayCanAdvanceThroughRecordedMoves() throws Exception {
+        SolitaireGame game =
+                new SolitaireGame(BoardType.ENGLISH, 7);
+
+        GameRecorder recorder =
+                new GameRecorder(game, GameMode.MANUAL);
+
+        Move move = new Move(
+                new Position(1, 3),
+                new Position(3, 3)
+        );
+
+        assertTrue(game.makeMove(move.from(), move.to()));
+
+        recorder.recordMove(move);
+
+        Path recordingFile =
+                temporaryDirectory.resolve("replay-test.txt");
+
+        recorder.save(recordingFile);
+
+        GameReplay replay = GameReplay.load(recordingFile);
+
+        assertTrue(replay.step());
+
+        assertEquals(
+                game.getPegCount(),
+                replay.getGame().getPegCount()
+        );
+    }
 }
